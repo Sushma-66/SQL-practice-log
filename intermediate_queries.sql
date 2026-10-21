@@ -412,6 +412,8 @@ qualified_customers AS (
     GROUP BY customer_id
     HAVING COUNT(account_id) > 1
 )
+
+  
 SELECT
     d.customer_name,
     d.account_id,
@@ -425,3 +427,35 @@ JOIN qualified_customers q
     ON d.customer_id = q.customer_id
 WHERE d.total_debit > 2000;
 
+
+WITH ranked AS (
+    SELECT
+        customer_id,
+        order_date,
+        ROW_NUMBER() OVER (
+            PARTITION BY customer_id
+            ORDER BY order_date, order_id
+        ) AS order_rank
+    FROM orders
+),
+first_two AS (
+    SELECT
+        customer_id,
+        MAX(CASE WHEN order_rank = 1 THEN order_date END) AS first_order_date,
+        MAX(CASE WHEN order_rank = 2 THEN order_date END) AS second_order_date
+    FROM ranked
+    WHERE order_rank <= 2
+    GROUP BY customer_id
+)
+SELECT
+    customer_id,
+    first_order_date,
+    second_order_date,
+    second_order_date - first_order_date AS days_to_return,
+    CASE
+        WHEN second_order_date - first_order_date <= 30 THEN 'Yes'
+        ELSE 'No'
+    END AS returned_within_30
+FROM first_two
+WHERE second_order_date IS NOT NULL
+ORDER BY days_to_return;
